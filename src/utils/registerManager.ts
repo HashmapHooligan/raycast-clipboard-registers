@@ -7,6 +7,13 @@ import { ClipboardContent, ClipboardState, RegisterMetadata } from "./types";
 const STORAGE_KEY = "clipboard-registers-state";
 const CONTENT_DIR = "clipboard-registers";
 
+function fileUriToPath(uri: string): string {
+  if (uri.startsWith("file://")) {
+    return decodeURIComponent(uri.slice(7));
+  }
+  return uri;
+}
+
 export class RegisterManager {
   private static instance: RegisterManager;
   private contentPath: string;
@@ -80,9 +87,11 @@ export class RegisterManager {
       const content = await Clipboard.read();
 
       if (content.file) {
+        // Convert file URI to regular path for storage
+        const filePath = fileUriToPath(content.file);
         return {
           type: "file",
-          filePaths: [content.file],
+          filePaths: [filePath],
         };
       } else if (content.html) {
         return {
@@ -172,7 +181,9 @@ export class RegisterManager {
           const filePaths = JSON.parse(await fs.readFile(filePath, "utf-8"));
           // Copy first file path as file reference
           if (filePaths.length > 0) {
-            await Clipboard.copy({ file: filePaths[0] });
+            // Ensure we're using the correct file path format
+            const cleanPath = fileUriToPath(filePaths[0]);
+            await Clipboard.copy({ file: cleanPath });
           }
           break;
         }
@@ -200,11 +211,7 @@ export class RegisterManager {
   async switchToRegister(targetRegister: 1 | 2 | 3 | 4): Promise<void> {
     await this.initializeIfNeeded();
 
-    // For debugging purposes: reset storage
-    // await LocalStorage.clear();
     const state = await this.getState();
-    // For debugging purposes: write state
-    // console.info(state)
 
     // If switching to the same register, do nothing
     if (state.activeRegister === targetRegister) {
@@ -224,7 +231,10 @@ export class RegisterManager {
         await this.cleanupRegisterContent(state.activeRegister);
 
         // Save current content
-        state.registers[state.activeRegister as 1 | 2 | 3 | 4] = await this.saveContentToFile(currentContent, state.activeRegister);
+        state.registers[state.activeRegister as 1 | 2 | 3 | 4] = await this.saveContentToFile(
+          currentContent,
+          state.activeRegister,
+        );
       }
 
       // Step 2: Load target register content to clipboard
