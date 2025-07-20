@@ -1,4 +1,4 @@
-import { Icon } from "@raycast/api";
+import { Icon, Color } from "@raycast/api";
 
 /**
  * Format a timestamp into a relative time string
@@ -26,19 +26,19 @@ export function formatRelativeTime(timestamp: number): string {
 }
 
 /**
- * Get the appropriate Raycast icon for content type
+ * Get the appropriate Raycast icon for content type with color
  */
-export function getContentTypeIcon(contentType: "text" | "file" | "html" | null): Icon {
+export function getContentTypeIcon(contentType: "text" | "file" | "html" | null): { source: Icon; tintColor: Color } {
   switch (contentType) {
     case "text":
-      return Icon.Text;
+      return { source: Icon.Text, tintColor: Color.Blue };
     case "file":
-      return Icon.Document;
+      return { source: Icon.Document, tintColor: Color.Orange };
     case "html":
-      return Icon.Globe;
+      return { source: Icon.Globe, tintColor: Color.Green };
     case null:
     default:
-      return Icon.Circle;
+      return { source: Icon.Circle, tintColor: Color.SecondaryText };
   }
 }
 

@@ -124,7 +124,7 @@ export default function Command() {
                         icon={isActive ? Icon.Dot : Icon.Circle}
                       />
                       <List.Item.Detail.Metadata.Separator />
-                      <List.Item.Detail.Metadata.Label title="Content Type" text={metadata.contentType.toUpperCase()} />
+                      <List.Item.Detail.Metadata.Label title="Content Type" text={metadata.contentType} />
                       <List.Item.Detail.Metadata.Label title="Last Updated" text={timestamp} />
                       {metadata.originalFileName && (
                         <List.Item.Detail.Metadata.Label title="File Name" text={metadata.originalFileName} />
@@ -156,7 +156,6 @@ export default function Command() {
                   icon={Icon.Switch}
                   onAction={() => {
                     handleSwitchToRegister(id)
-                    closeMainWindow()
                   }}
                 />
                 {metadata && (
