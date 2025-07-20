@@ -2,11 +2,34 @@ import { Clipboard, environment, LocalStorage, showToast, Toast } from "@raycast
 import { promises as fs } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
-import { ClipboardContent, ClipboardState, RegisterMetadata } from "./types";
+import {
+  ClipboardContent,
+  ClipboardState,
+  RegisterMetadata,
+  RegisterId,
+  ContentType,
+  RegisterDisplayData
+} from "./types";
+import { CONFIG, CONTENT_TYPES, DEFAULT_STATE, REGISTER_IDS } from "./constants";
+import {
+  RegisterError,
+  FileOperationError,
+  StateError,
+  ClipboardError
+} from "./errors";
+import {
+  validateRegisterId,
+  validateClipboardState,
+  sanitizeFilePath,
+  validateTextContent,
+  validateFilePaths,
+  validateHtmlContent,
+  createTextPreview
+} from "./validation";
 
-const STORAGE_KEY = "clipboard-registers-state";
-const CONTENT_DIR = "clipboard-registers";
-
+/**
+ * Converts file URI to regular file path
+ */
 function fileUriToPath(uri: string): string {
   if (uri.startsWith("file://")) {
     return decodeURIComponent(uri.slice(7));
@@ -14,14 +37,20 @@ function fileUriToPath(uri: string): string {
   return uri;
 }
 
+/**
+ * Manages clipboard registers with persistent storage
+ */
 export class RegisterManager {
   private static instance: RegisterManager;
   private contentPath: string;
 
   private constructor() {
-    this.contentPath = join(environment.supportPath, CONTENT_DIR);
+    this.contentPath = join(environment.supportPath, CONFIG.CONTENT_DIR);
   }
 
+  /**
+   * Gets the singleton instance of RegisterManager
+   */
   static getInstance(): RegisterManager {
     if (!RegisterManager.instance) {
       RegisterManager.instance = new RegisterManager();
@@ -29,59 +58,112 @@ export class RegisterManager {
     return RegisterManager.instance;
   }
 
+  /**
+   * Ensures the content directory exists (with caching to avoid repeated checks)
+   */
+  private _directoryEnsured = false;
+  
   async ensureContentDirectory(): Promise<void> {
+    if (this._directoryEnsured) {
+      return;
+    }
+    
     try {
       await fs.mkdir(this.contentPath, { recursive: true });
+      this._directoryEnsured = true;
     } catch (error) {
-      console.error("Failed to create content directory:", error);
+      throw new FileOperationError(
+        `Failed to create content directory: ${error}`,
+        this.contentPath
+      );
     }
   }
 
+  /**
+   * Writes a file atomically by writing to a temporary file first, then renaming
+   * This prevents corruption if the write operation is interrupted
+   */
+  private async writeFileAtomic(filePath: string, content: string): Promise<void> {
+    const tempPath = `${filePath}.tmp`;
+    
+    try {
+      await fs.writeFile(tempPath, content, "utf-8");
+      await fs.rename(tempPath, filePath);
+    } catch (error) {
+      // Clean up temp file if it exists
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves the current clipboard state from storage
+   */
   async getState(): Promise<ClipboardState> {
-    const stored = await LocalStorage.getItem<string>(STORAGE_KEY);
+    const stored = await LocalStorage.getItem<string>(CONFIG.STORAGE_KEY);
     if (stored) {
       try {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        return validateClipboardState(parsed);
       } catch (error) {
         console.error("Failed to parse stored state:", error);
+        throw new StateError(`Invalid stored state: ${error}`);
       }
     }
 
-    // Default state
-    return {
-      activeRegister: 1,
-      initialized: false,
-      registers: { 1: null, 2: null, 3: null, 4: null },
-    };
+    // Return default state
+    return { ...DEFAULT_STATE };
   }
 
+  /**
+   * Saves the clipboard state to storage
+   */
   async setState(state: ClipboardState): Promise<void> {
-    await LocalStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      const validatedState = validateClipboardState(state);
+      await LocalStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(validatedState));
+    } catch (error) {
+      throw new StateError(`Failed to save state: ${error}`);
+    }
   }
 
+  /**
+   * Initializes the clipboard registers if not already done
+   */
   async initializeIfNeeded(): Promise<void> {
     const state = await this.getState();
 
     if (!state.initialized) {
-      // First run - capture current clipboard content for register 1
-      const currentContent = await this.getCurrentClipboardContent();
+      try {
+        // First run - capture current clipboard content for register 1
+        const currentContent = await this.getCurrentClipboardContent();
 
-      if (currentContent) {
-        state.registers[1] = await this.saveContentToFile(currentContent, 1);
+        if (currentContent) {
+          state.registers[1] = await this.saveContentToFile(currentContent, 1);
+        }
+
+        state.activeRegister = 1;
+        state.initialized = true;
+        await this.setState(state);
+
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Clipboard Registers Initialized",
+          message: "Register 1 is now active with current clipboard content",
+        });
+      } catch (error) {
+        throw new RegisterError(`Failed to initialize clipboard registers: ${error}`);
       }
-
-      state.activeRegister = 1;
-      state.initialized = true;
-      await this.setState(state);
-
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Clipboard Registers Initialized",
-        message: "Register 1 is now active with current clipboard content",
-      });
     }
   }
 
+  /**
+   * Gets the current clipboard content
+   */
   async getCurrentClipboardContent(): Promise<ClipboardContent | null> {
     try {
       const content = await Clipboard.read();
@@ -89,135 +171,185 @@ export class RegisterManager {
       if (content.file) {
         // Convert file URI to regular path for storage
         const filePath = fileUriToPath(content.file);
+        const validatedPaths = validateFilePaths([filePath]);
         return {
-          type: "file",
-          filePaths: [filePath],
+          type: CONTENT_TYPES.FILE,
+          filePaths: validatedPaths,
         };
       } else if (content.html) {
+        const validatedHtml = validateHtmlContent(content.html, content.text);
         return {
-          type: "html",
-          html: content.html,
-          text: content.text,
+          type: CONTENT_TYPES.HTML,
+          html: validatedHtml.html,
+          text: validatedHtml.text,
         };
       } else if (content.text) {
+        const validatedText = validateTextContent(content.text);
         return {
-          type: "text",
-          text: content.text,
+          type: CONTENT_TYPES.TEXT,
+          text: validatedText,
         };
       }
 
       return null;
     } catch (error) {
-      console.error("Failed to read clipboard:", error);
-      return null;
+      throw new ClipboardError(`Failed to read clipboard: ${error}`);
     }
   }
 
-  async saveContentToFile(content: ClipboardContent, registerId: number): Promise<RegisterMetadata> {
-    await this.ensureContentDirectory();
-
+  /**
+   * Saves clipboard content to a file and returns metadata
+   */
+  async saveContentToFile(content: ClipboardContent, registerId: RegisterId): Promise<RegisterMetadata> {
+    const validatedRegisterId = validateRegisterId(registerId);
     const uuid = randomUUID();
-    const timestamp = Date.now();
-    let fileName: string;
-    let originalFileName: string | undefined;
-    let filePaths: string[] | undefined;
-    let textPreview: string | undefined;
+    
+    try {
+      await this.ensureContentDirectory();
 
-    switch (content.type) {
-      case "text": {
-        fileName = `${uuid}.txt`;
-        await fs.writeFile(join(this.contentPath, fileName), content.text, "utf-8");
-        textPreview = content.text.substring(0, 1000) + ((content.text.length > 1000) ? "..." : "");
-        break;
+      const timestamp = Date.now();
+      let fileName: string;
+      let originalFileName: string | undefined;
+      let filePaths: string[] | undefined;
+      let textPreview: string | undefined;
+
+      switch (content.type) {
+        case CONTENT_TYPES.TEXT: {
+          const validatedText = validateTextContent(content.text);
+          fileName = `${uuid}.txt`;
+          const filePath = sanitizeFilePath(fileName, this.contentPath);
+          await this.writeFileAtomic(filePath, validatedText);
+          textPreview = createTextPreview(validatedText);
+          break;
+        }
+
+        case CONTENT_TYPES.HTML: {
+          const validatedHtml = validateHtmlContent(content.html, content.text);
+          fileName = `${uuid}.json`;
+          const filePath = sanitizeFilePath(fileName, this.contentPath);
+          const htmlData = { html: validatedHtml.html, text: validatedHtml.text };
+          await this.writeFileAtomic(filePath, JSON.stringify(htmlData));
+          textPreview = validatedHtml.text ? createTextPreview(validatedHtml.text) : undefined;
+          break;
+        }
+
+        case CONTENT_TYPES.FILE: {
+          const validatedPaths = validateFilePaths(content.filePaths);
+          fileName = `${uuid}.json`;
+          filePaths = validatedPaths;
+          const filePath = sanitizeFilePath(fileName, this.contentPath);
+          await this.writeFileAtomic(filePath, JSON.stringify(validatedPaths));
+          originalFileName = validatedPaths[0]?.split("/").pop();
+          textPreview = `${validatedPaths.length} file(s)`;
+          break;
+        }
+
+        default:
+          throw new RegisterError(`Unsupported content type: ${(content as any).type}`, validatedRegisterId);
       }
 
-      case "html": {
-        fileName = `${uuid}.json`;
-        const htmlData = { html: content.html, text: content.text };
-        await fs.writeFile(join(this.contentPath, fileName), JSON.stringify(htmlData), "utf-8");
-        textPreview = content.text?.substring(0, 1000);
-        break;
-      }
-
-      case "file": {
-        fileName = `${uuid}.json`;
-        filePaths = content.filePaths;
-        await fs.writeFile(join(this.contentPath, fileName), JSON.stringify(content.filePaths), "utf-8");
-        originalFileName = content.filePaths[0]?.split("/").pop();
-        textPreview = `${content.filePaths.length} file(s)`;
-        break;
-      }
+      return {
+        registerId: validatedRegisterId,
+        contentType: content.type as ContentType,
+        fileName,
+        timestamp,
+        originalFileName,
+        filePaths,
+        textPreview,
+      };
+    } catch (error) {
+      throw new FileOperationError(
+        `Failed to save content for register ${validatedRegisterId}: ${error}`,
+        `${uuid}.${content.type}`,
+        validatedRegisterId
+      );
     }
-
-    return {
-      registerId,
-      contentType: content.type,
-      fileName,
-      timestamp,
-      originalFileName,
-      filePaths,
-      textPreview,
-    };
   }
 
+  /**
+   * Loads content from file and copies it to clipboard
+   */
   async loadContentFromFile(metadata: RegisterMetadata): Promise<void> {
-    const filePath = join(this.contentPath, metadata.fileName);
+    const filePath = sanitizeFilePath(metadata.fileName, this.contentPath);
 
     try {
       switch (metadata.contentType) {
-        case "text": {
+        case CONTENT_TYPES.TEXT: {
           const text = await fs.readFile(filePath, "utf-8");
           await Clipboard.copy(text);
           break;
         }
 
-        case "html": {
+        case CONTENT_TYPES.HTML: {
           const htmlData = JSON.parse(await fs.readFile(filePath, "utf-8"));
           await Clipboard.copy({ html: htmlData.html, text: htmlData.text });
           break;
         }
 
-        case "file": {
+        case CONTENT_TYPES.FILE: {
           const filePaths = JSON.parse(await fs.readFile(filePath, "utf-8"));
+          const validatedPaths = validateFilePaths(filePaths);
           // Copy first file path as file reference
-          if (filePaths.length > 0) {
+          if (validatedPaths.length > 0) {
             // Ensure we're using the correct file path format
-            const cleanPath = fileUriToPath(filePaths[0]);
+            const cleanPath = fileUriToPath(validatedPaths[0]);
             await Clipboard.copy({ file: cleanPath });
           }
           break;
         }
+
+        default:
+          throw new RegisterError(
+            `Unsupported content type: ${metadata.contentType}`,
+            metadata.registerId
+          );
       }
     } catch (error) {
-      console.error(`Failed to load content from ${filePath}:`, error);
-      throw new Error(`Failed to load register ${metadata.registerId} content`);
+      throw new FileOperationError(
+        `Failed to load content from register ${metadata.registerId}: ${error}`,
+        filePath,
+        metadata.registerId
+      );
     }
   }
 
-  async cleanupRegisterContent(registerId: number): Promise<void> {
+  /**
+   * Cleans up the file associated with a register
+   */
+  async cleanupRegisterContent(registerId: RegisterId): Promise<void> {
+    const validatedRegisterId = validateRegisterId(registerId);
     const state = await this.getState();
-    const metadata = state.registers[registerId as 1 | 2 | 3 | 4];
+    const metadata = state.registers[validatedRegisterId];
 
     if (metadata) {
       try {
-        const filePath = join(this.contentPath, metadata.fileName);
+        const filePath = sanitizeFilePath(metadata.fileName, this.contentPath);
         await fs.unlink(filePath);
       } catch (error) {
-        console.error(`Failed to cleanup file for register ${registerId}:`, error);
+        throw new FileOperationError(
+          `Failed to cleanup file for register ${validatedRegisterId}: ${error}`,
+          metadata.fileName,
+          validatedRegisterId
+        );
       }
     }
   }
 
-  async switchToRegister(targetRegister: 1 | 2 | 3 | 4): Promise<void> {
+  /**
+   * Switches to a different register
+   */
+  async switchToRegister(targetRegister: RegisterId): Promise<void> {
+    const validatedTargetRegister = validateRegisterId(targetRegister);
+    
     await this.initializeIfNeeded();
 
     const state = await this.getState();
 
     // If switching to the same register, do nothing
-    if (state.activeRegister === targetRegister) {
+    if (state.activeRegister === validatedTargetRegister) {
       await showToast({
         style: Toast.Style.Success,
-        title: `Register ${targetRegister}`,
+        title: `Register ${validatedTargetRegister}`,
         message: "Already active",
       });
       return;
@@ -231,19 +363,19 @@ export class RegisterManager {
         await this.cleanupRegisterContent(state.activeRegister);
 
         // Save current content
-        state.registers[state.activeRegister as 1 | 2 | 3 | 4] = await this.saveContentToFile(
+        state.registers[state.activeRegister] = await this.saveContentToFile(
           currentContent,
           state.activeRegister,
         );
       }
 
       // Step 2: Load target register content to clipboard
-      const targetMetadata = state.registers[targetRegister];
+      const targetMetadata = state.registers[validatedTargetRegister];
       if (targetMetadata) {
         await this.loadContentFromFile(targetMetadata);
         await showToast({
           style: Toast.Style.Success,
-          title: `Register ${targetRegister}`,
+          title: `Register ${validatedTargetRegister}`,
           message: `Loaded ${targetMetadata.contentType} content from ${new Date(targetMetadata.timestamp).toLocaleTimeString()}`,
         });
       } else {
@@ -251,13 +383,13 @@ export class RegisterManager {
         await Clipboard.clear();
         await showToast({
           style: Toast.Style.Success,
-          title: `Register ${targetRegister}`,
+          title: `Register ${validatedTargetRegister}`,
           message: "Register is empty - clipboard cleared",
         });
       }
 
       // Step 3: Update active register
-      state.activeRegister = targetRegister;
+      state.activeRegister = validatedTargetRegister;
       await this.setState(state);
     } catch (error) {
       console.error("Failed to switch register:", error);
@@ -269,48 +401,21 @@ export class RegisterManager {
     }
   }
 
-  async copyRegisterContent(registerId: 1 | 2 | 3 | 4): Promise<void> {
+  /**
+   * Clears a register and its associated file
+   */
+  async clearRegister(registerId: RegisterId): Promise<void> {
+    const validatedRegisterId = validateRegisterId(registerId);
+    
     await this.initializeIfNeeded();
 
     const state = await this.getState();
-    const metadata = state.registers[registerId];
-
-    if (!metadata) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: `Register ${registerId}`,
-        message: "Register is empty",
-      });
-      return;
-    }
-
-    try {
-      await this.loadContentFromFile(metadata);
-      await showToast({
-        style: Toast.Style.Success,
-        title: `Register ${registerId}`,
-        message: `Copied ${metadata.contentType} content to clipboard`,
-      });
-    } catch (error) {
-      console.error("Failed to copy register content:", error);
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Copy Failed",
-        message: String(error),
-      });
-    }
-  }
-
-  async clearRegister(registerId: 1 | 2 | 3 | 4): Promise<void> {
-    await this.initializeIfNeeded();
-
-    const state = await this.getState();
-    const metadata = state.registers[registerId];
+    const metadata = state.registers[validatedRegisterId];
 
     if (!metadata) {
       await showToast({
         style: Toast.Style.Success,
-        title: `Register ${registerId}`,
+        title: `Register ${validatedRegisterId}`,
         message: "Register is already empty",
       });
       return;
@@ -318,13 +423,13 @@ export class RegisterManager {
 
     try {
       // Clean up the file
-      await this.cleanupRegisterContent(registerId);
+      await this.cleanupRegisterContent(validatedRegisterId);
       
       // Clear the register in state
-      state.registers[registerId] = null;
+      state.registers[validatedRegisterId] = null;
       
       // If we're clearing the active register, clear the clipboard too
-      if (state.activeRegister === registerId) {
+      if (state.activeRegister === validatedRegisterId) {
         await Clipboard.clear();
       }
       
@@ -332,7 +437,7 @@ export class RegisterManager {
       
       await showToast({
         style: Toast.Style.Success,
-        title: `Register ${registerId}`,
+        title: `Register ${validatedRegisterId}`,
         message: "Register cleared",
       });
     } catch (error) {
@@ -345,22 +450,18 @@ export class RegisterManager {
     }
   }
 
-  async getRegisterDisplayData(): Promise<{
-    activeRegister: number;
-    registers: Array<{
-      id: 1 | 2 | 3 | 4;
-      metadata: RegisterMetadata | null;
-      isActive: boolean;
-    }>;
-  }> {
+  /**
+   * Gets display data for the overview component
+   */
+  async getRegisterDisplayData(): Promise<RegisterDisplayData> {
     await this.initializeIfNeeded();
     const state = await this.getState();
 
     return {
       activeRegister: state.activeRegister,
-      registers: [1, 2, 3, 4].map((id) => ({
-        id: id as 1 | 2 | 3 | 4,
-        metadata: state.registers[id as 1 | 2 | 3 | 4],
+      registers: (REGISTER_IDS as readonly RegisterId[]).map((id) => ({
+        id,
+        metadata: state.registers[id],
         isActive: state.activeRegister === id,
       })),
     };

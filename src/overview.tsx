@@ -1,17 +1,8 @@
 import { Action, ActionPanel, List, Icon, showToast, Toast } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { registerManager } from "./utils/registerManager";
-import { RegisterMetadata } from "./utils/types";
+import { RegisterDisplayData, RegisterId } from "./utils/types";
 import { formatRelativeTime, getContentTypeIcon, getContentPreview } from "./utils/formatUtils";
-
-interface RegisterDisplayData {
-  activeRegister: number;
-  registers: Array<{
-    id: 1 | 2 | 3 | 4;
-    metadata: RegisterMetadata | null;
-    isActive: boolean;
-  }>;
-}
 
 export default function Command() {
   const [displayData, setDisplayData] = useState<RegisterDisplayData | null>(null);
@@ -37,7 +28,7 @@ export default function Command() {
     loadData();
   }, []);
 
-  const handleSwitchToRegister = async (registerId: 1 | 2 | 3 | 4) => {
+  const handleSwitchToRegister = async (registerId: RegisterId) => {
     setIsLoading(true);
     try {
       await registerManager.switchToRegister(registerId);
@@ -48,20 +39,7 @@ export default function Command() {
     }
   };
 
-  const handleCopyRegister = async (registerId: 1 | 2 | 3 | 4) => {
-    try {
-      await registerManager.copyRegisterContent(registerId);
-    } catch (error) {
-      console.error("Failed to copy register:", error);
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Copy Failed",
-        message: `Failed to copy register ${registerId}`,
-      });
-    }
-  };
-
-  const handleClearRegister = async (registerId: 1 | 2 | 3 | 4) => {
+  const handleClearRegister = async (registerId: RegisterId) => {
     try {
       await registerManager.clearRegister(registerId);
       await loadData();
@@ -160,12 +138,6 @@ export default function Command() {
                 />
                 {metadata && (
                   <>
-                    <Action
-                      title={`Copy Register ${id}`}
-                      icon={Icon.Clipboard}
-                      shortcut={{ modifiers: ["cmd"], key: "c" }}
-                      onAction={() => handleCopyRegister(id)}
-                    />
                     <Action
                       title={`Clear Register ${id}`}
                       icon={Icon.Trash}
