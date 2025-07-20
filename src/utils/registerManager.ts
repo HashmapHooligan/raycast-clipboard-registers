@@ -243,7 +243,7 @@ export class RegisterManager {
         await this.loadContentFromFile(targetMetadata);
         await showToast({
           style: Toast.Style.Success,
-          title: `Switched to Register ${targetRegister}`,
+          title: `Register ${targetRegister}`,
           message: `Loaded ${targetMetadata.contentType} content from ${new Date(targetMetadata.timestamp).toLocaleTimeString()}`,
         });
       } else {
@@ -251,7 +251,7 @@ export class RegisterManager {
         await Clipboard.clear();
         await showToast({
           style: Toast.Style.Success,
-          title: `Switched to Register ${targetRegister}`,
+          title: `Register ${targetRegister}`,
           message: "Register is empty - clipboard cleared",
         });
       }
