@@ -9,7 +9,7 @@ export class RegisterError extends Error {
   constructor(
     message: string,
     public readonly registerId?: number,
-    public readonly operation?: string
+    public readonly operation?: string,
   ) {
     super(message);
     this.name = "RegisterError";
@@ -23,7 +23,7 @@ export class FileOperationError extends RegisterError {
   constructor(
     message: string,
     public readonly filePath: string,
-    registerId?: number
+    registerId?: number,
   ) {
     super(message, registerId, "file_operation");
     this.name = "FileOperationError";
@@ -47,7 +47,7 @@ export class ValidationError extends RegisterError {
   constructor(
     message: string,
     public readonly field: string,
-    public readonly value: unknown
+    public readonly value: unknown,
   ) {
     super(message, undefined, "validation");
     this.name = "ValidationError";

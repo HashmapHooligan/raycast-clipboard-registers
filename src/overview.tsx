@@ -67,13 +67,13 @@ export default function Command() {
           contentType,
           metadata?.textPreview,
           metadata?.originalFileName,
-          metadata?.filePaths
+          metadata?.filePaths,
         );
         const timestamp = metadata ? formatRelativeTime(metadata.timestamp) : "";
-        
+
         // Create title with active indicator
         const title = `Register ${id}`;
-        
+
         // Create subtitle with content info
         let subtitle = "";
         if (timestamp) {
@@ -88,7 +88,11 @@ export default function Command() {
             icon={icon}
             title={title}
             subtitle={subtitle}
-            accessories={isActive ? [{ icon: { source: Icon.Dot, tintColor: Color.Green }, tooltip: "Active Register" }] : undefined}
+            accessories={
+              isActive
+                ? [{ icon: { source: Icon.Dot, tintColor: Color.Green }, tooltip: "Active Register" }]
+                : undefined
+            }
             detail={
               <List.Item.Detail
                 markdown={`\`\`\`\n${preview}\n\`\`\``}
@@ -96,9 +100,9 @@ export default function Command() {
                   metadata ? (
                     <List.Item.Detail.Metadata>
                       <List.Item.Detail.Metadata.Label title="Register" text={`#${id}`} />
-                      <List.Item.Detail.Metadata.Label 
-                        title="Status" 
-                        text={isActive ? "Active" : "Inactive"} 
+                      <List.Item.Detail.Metadata.Label
+                        title="Status"
+                        text={isActive ? "Active" : "Inactive"}
                         icon={isActive ? Icon.Dot : Icon.Circle}
                       />
                       <List.Item.Detail.Metadata.Separator />
@@ -108,20 +112,13 @@ export default function Command() {
                         <List.Item.Detail.Metadata.Label title="File Name" text={metadata.originalFileName} />
                       )}
                       {metadata.filePaths && metadata.filePaths.length > 1 && (
-                        <List.Item.Detail.Metadata.Label 
-                          title="Files" 
-                          text={`${metadata.filePaths.length} files`} 
-                        />
+                        <List.Item.Detail.Metadata.Label title="Files" text={`${metadata.filePaths.length} files`} />
                       )}
                     </List.Item.Detail.Metadata>
                   ) : (
                     <List.Item.Detail.Metadata>
                       <List.Item.Detail.Metadata.Label title="Register" text={`#${id}`} />
-                      <List.Item.Detail.Metadata.Label 
-                        title="Status" 
-                        text="Empty" 
-                        icon={Icon.Circle}
-                      />
+                      <List.Item.Detail.Metadata.Label title="Status" text="Empty" icon={Icon.Circle} />
                     </List.Item.Detail.Metadata>
                   )
                 }
@@ -133,7 +130,7 @@ export default function Command() {
                   title={`Switch to Register ${id}`}
                   icon={Icon.Switch}
                   onAction={() => {
-                    handleSwitchToRegister(id)
+                    handleSwitchToRegister(id);
                   }}
                 />
                 {metadata && (

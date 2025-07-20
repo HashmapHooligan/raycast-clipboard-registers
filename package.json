@@ -11,7 +11,7 @@
       "name": "overview",
       "title": "Registers Overview",
       "subtitle": "View and manage all clipboard registers",
-      "description": "View all clipboard registers in a grid layout with quick actions",
+      "description": "View and manage all clipboard registers in a list with quick actions",
       "mode": "view"
     },
     {

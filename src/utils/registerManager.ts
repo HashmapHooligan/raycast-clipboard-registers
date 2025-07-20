@@ -8,15 +8,10 @@ import {
   RegisterMetadata,
   RegisterId,
   ContentType,
-  RegisterDisplayData
+  RegisterDisplayData,
 } from "./types";
 import { CONFIG, CONTENT_TYPES, DEFAULT_STATE, REGISTER_IDS } from "./constants";
-import {
-  RegisterError,
-  FileOperationError,
-  StateError,
-  ClipboardError
-} from "./errors";
+import { RegisterError, FileOperationError, StateError, ClipboardError } from "./errors";
 import {
   validateRegisterId,
   validateClipboardState,
@@ -24,7 +19,7 @@ import {
   validateTextContent,
   validateFilePaths,
   validateHtmlContent,
-  createTextPreview
+  createTextPreview,
 } from "./validation";
 
 /**
@@ -62,20 +57,17 @@ export class RegisterManager {
    * Ensures the content directory exists (with caching to avoid repeated checks)
    */
   private _directoryEnsured = false;
-  
+
   async ensureContentDirectory(): Promise<void> {
     if (this._directoryEnsured) {
       return;
     }
-    
+
     try {
       await fs.mkdir(this.contentPath, { recursive: true });
       this._directoryEnsured = true;
     } catch (error) {
-      throw new FileOperationError(
-        `Failed to create content directory: ${error}`,
-        this.contentPath
-      );
+      throw new FileOperationError(`Failed to create content directory: ${error}`, this.contentPath);
     }
   }
 
@@ -85,7 +77,7 @@ export class RegisterManager {
    */
   private async writeFileAtomic(filePath: string, content: string): Promise<void> {
     const tempPath = `${filePath}.tmp`;
-    
+
     try {
       await fs.writeFile(tempPath, content, "utf-8");
       await fs.rename(tempPath, filePath);
@@ -203,7 +195,7 @@ export class RegisterManager {
   async saveContentToFile(content: ClipboardContent, registerId: RegisterId): Promise<RegisterMetadata> {
     const validatedRegisterId = validateRegisterId(registerId);
     const uuid = randomUUID();
-    
+
     try {
       await this.ensureContentDirectory();
 
@@ -245,7 +237,7 @@ export class RegisterManager {
         }
 
         default:
-          throw new RegisterError(`Unsupported content type: ${(content as any).type}`, validatedRegisterId);
+          throw new RegisterError(`Unsupported content type`, validatedRegisterId);
       }
 
       return {
@@ -261,7 +253,7 @@ export class RegisterManager {
       throw new FileOperationError(
         `Failed to save content for register ${validatedRegisterId}: ${error}`,
         `${uuid}.${content.type}`,
-        validatedRegisterId
+        validatedRegisterId,
       );
     }
   }
@@ -299,16 +291,13 @@ export class RegisterManager {
         }
 
         default:
-          throw new RegisterError(
-            `Unsupported content type: ${metadata.contentType}`,
-            metadata.registerId
-          );
+          throw new RegisterError(`Unsupported content type: ${metadata.contentType}`, metadata.registerId);
       }
     } catch (error) {
       throw new FileOperationError(
         `Failed to load content from register ${metadata.registerId}: ${error}`,
         filePath,
-        metadata.registerId
+        metadata.registerId,
       );
     }
   }
@@ -329,7 +318,7 @@ export class RegisterManager {
         throw new FileOperationError(
           `Failed to cleanup file for register ${validatedRegisterId}: ${error}`,
           metadata.fileName,
-          validatedRegisterId
+          validatedRegisterId,
         );
       }
     }
@@ -340,7 +329,7 @@ export class RegisterManager {
    */
   async switchToRegister(targetRegister: RegisterId): Promise<void> {
     const validatedTargetRegister = validateRegisterId(targetRegister);
-    
+
     await this.initializeIfNeeded();
 
     const state = await this.getState();
@@ -363,10 +352,7 @@ export class RegisterManager {
         await this.cleanupRegisterContent(state.activeRegister);
 
         // Save current content
-        state.registers[state.activeRegister] = await this.saveContentToFile(
-          currentContent,
-          state.activeRegister,
-        );
+        state.registers[state.activeRegister] = await this.saveContentToFile(currentContent, state.activeRegister);
       }
 
       // Step 2: Load target register content to clipboard
@@ -406,7 +392,7 @@ export class RegisterManager {
    */
   async clearRegister(registerId: RegisterId): Promise<void> {
     const validatedRegisterId = validateRegisterId(registerId);
-    
+
     await this.initializeIfNeeded();
 
     const state = await this.getState();
@@ -424,17 +410,17 @@ export class RegisterManager {
     try {
       // Clean up the file
       await this.cleanupRegisterContent(validatedRegisterId);
-      
+
       // Clear the register in state
       state.registers[validatedRegisterId] = null;
-      
+
       // If we're clearing the active register, clear the clipboard too
       if (state.activeRegister === validatedRegisterId) {
         await Clipboard.clear();
       }
-      
+
       await this.setState(state);
-      
+
       await showToast({
         style: Toast.Style.Success,
         title: `Register ${validatedRegisterId}`,

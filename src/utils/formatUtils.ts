@@ -20,11 +20,11 @@ const TIME_CONSTANTS = {
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
-  
+
   const minutes = Math.floor(diff / TIME_CONSTANTS.MINUTE);
   const hours = Math.floor(diff / TIME_CONSTANTS.HOUR);
   const days = Math.floor(diff / TIME_CONSTANTS.DAY);
-  
+
   if (minutes < 1) {
     return "Just now";
   } else if (minutes < 60) {
@@ -70,7 +70,7 @@ export function getContentPreview(
   contentType: ContentType | null,
   textPreview?: string,
   originalFileName?: string,
-  filePaths?: string[]
+  filePaths?: string[],
 ): string {
   if (!contentType) {
     return "Empty register";
@@ -80,7 +80,7 @@ export function getContentPreview(
     case CONTENT_TYPES.TEXT:
     case CONTENT_TYPES.HTML:
       return textPreview || "No preview available";
-      
+
     case CONTENT_TYPES.FILE:
       if (originalFileName) {
         return originalFileName;
@@ -89,7 +89,7 @@ export function getContentPreview(
         return filePaths.length > 1 ? `${fileName} (+${filePaths.length - 1} more)` : fileName;
       }
       return "File content";
-      
+
     default:
       return "Unknown content";
   }

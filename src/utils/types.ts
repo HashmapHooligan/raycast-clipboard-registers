@@ -1,10 +1,10 @@
 import { REGISTER_IDS, CONTENT_TYPES } from "./constants";
 
 /** Valid register ID type derived from constants */
-export type RegisterId = typeof REGISTER_IDS[number];
+export type RegisterId = (typeof REGISTER_IDS)[number];
 
 /** Content type derived from constants */
-export type ContentType = typeof CONTENT_TYPES[keyof typeof CONTENT_TYPES];
+export type ContentType = (typeof CONTENT_TYPES)[keyof typeof CONTENT_TYPES];
 
 /** Type-safe register map */
 export type RegisterMap = Record<RegisterId, RegisterMetadata | null>;
@@ -92,9 +92,9 @@ export function isValidContentType(value: unknown): value is ContentType {
  */
 export function isValidRegisterMetadata(value: unknown): value is RegisterMetadata {
   if (!value || typeof value !== "object") return false;
-  
+
   const obj = value as Record<string, unknown>;
-  
+
   return (
     isValidRegisterId(obj.registerId) &&
     isValidContentType(obj.contentType) &&
@@ -111,9 +111,9 @@ export function isValidRegisterMetadata(value: unknown): value is RegisterMetada
  */
 export function isValidClipboardState(value: unknown): value is ClipboardState {
   if (!value || typeof value !== "object") return false;
-  
+
   const obj = value as Record<string, unknown>;
-  
+
   return (
     isValidRegisterId(obj.activeRegister) &&
     typeof obj.initialized === "boolean" &&
