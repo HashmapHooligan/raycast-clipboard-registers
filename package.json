@@ -3,7 +3,7 @@
   "name": "clipboard-registers",
   "title": "Clipboard Registers",
   "description": "Adds “clipboard registers” so you can save multiple clipboard slots, cycle between them with custom hotkeys, and paste or overwrite the active register on demand.",
-  "icon": "extension-icon.png",
+  "icon": "icon.png",
   "author": "hashmaphooligan",
   "license": "MIT",
   "commands": [

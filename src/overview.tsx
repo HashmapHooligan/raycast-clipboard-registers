@@ -1,4 +1,4 @@
-import { Action, ActionPanel, List, Icon, showToast, Toast } from "@raycast/api";
+import { Action, ActionPanel, List, Icon, showToast, Toast, Color } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { registerManager } from "./utils/registerManager";
 import { RegisterDisplayData, RegisterId } from "./utils/types";
@@ -88,7 +88,7 @@ export default function Command() {
             icon={icon}
             title={title}
             subtitle={subtitle}
-            accessories={isActive ? [{ icon: Icon.Dot, tooltip: "Active Register" }] : undefined}
+            accessories={isActive ? [{ icon: { source: Icon.Dot, tintColor: Color.Green }, tooltip: "Active Register" }] : undefined}
             detail={
               <List.Item.Detail
                 markdown={`\`\`\`\n${preview}\n\`\`\``}
