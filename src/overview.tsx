@@ -1,4 +1,4 @@
-import { Action, ActionPanel, closeMainWindow, Grid, Icon, showToast, Toast } from "@raycast/api";
+import { Action, ActionPanel, List, Icon, showToast, Toast, closeMainWindow } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { registerManager } from "./utils/registerManager";
 import { RegisterMetadata } from "./utils/types";
@@ -76,11 +76,11 @@ export default function Command() {
   };
 
   if (isLoading || !displayData) {
-    return <Grid isLoading={true} />;
+    return <List isLoading={true} />;
   }
 
   return (
-    <Grid columns={4} inset={Grid.Inset.Large}>
+    <List isShowingDetail>
       {displayData.registers.map((register) => {
         const { id, metadata, isActive } = register;
         const contentType = metadata?.contentType || null;
@@ -93,23 +93,70 @@ export default function Command() {
         );
         const timestamp = metadata ? formatRelativeTime(metadata.timestamp) : "";
         
+        // Create title with active indicator
+        const title = `Register ${id}`;
+        
+        // Create subtitle with content info
+        let subtitle = "";
+        if (timestamp) {
+          subtitle += `${timestamp}`;
+        } else {
+          subtitle = "Empty";
+        }
+
         return (
-          <Grid.Item
+          <List.Item
             key={id}
-            content={{
-              value: icon,
-              tooltip: `Register ${id}${isActive ? " (Active)" : ""}`,
-            }}
-            title={`Register ${id}${isActive ? " ●" : ""}`}
-            subtitle={metadata ? `${timestamp} • ${preview}` : "Empty"}
+            icon={icon}
+            title={title}
+            subtitle={subtitle}
+            accessories={isActive ? [{ icon: Icon.Dot, tooltip: "Active Register" }] : undefined}
+            detail={
+              <List.Item.Detail
+                markdown={`\`\`\`${preview}\`\`\``}
+                metadata={
+                  metadata ? (
+                    <List.Item.Detail.Metadata>
+                      <List.Item.Detail.Metadata.Label title="Register" text={`#${id}`} />
+                      <List.Item.Detail.Metadata.Label 
+                        title="Status" 
+                        text={isActive ? "Active" : "Inactive"} 
+                        icon={isActive ? Icon.Dot : Icon.Circle}
+                      />
+                      <List.Item.Detail.Metadata.Separator />
+                      <List.Item.Detail.Metadata.Label title="Content Type" text={metadata.contentType.toUpperCase()} />
+                      <List.Item.Detail.Metadata.Label title="Last Updated" text={timestamp} />
+                      {metadata.originalFileName && (
+                        <List.Item.Detail.Metadata.Label title="File Name" text={metadata.originalFileName} />
+                      )}
+                      {metadata.filePaths && metadata.filePaths.length > 1 && (
+                        <List.Item.Detail.Metadata.Label 
+                          title="Files" 
+                          text={`${metadata.filePaths.length} files`} 
+                        />
+                      )}
+                    </List.Item.Detail.Metadata>
+                  ) : (
+                    <List.Item.Detail.Metadata>
+                      <List.Item.Detail.Metadata.Label title="Register" text={`#${id}`} />
+                      <List.Item.Detail.Metadata.Label 
+                        title="Status" 
+                        text="Empty" 
+                        icon={Icon.Circle}
+                      />
+                    </List.Item.Detail.Metadata>
+                  )
+                }
+              />
+            }
             actions={
               <ActionPanel>
                 <Action
                   title={`Switch to Register ${id}`}
                   icon={Icon.Switch}
                   onAction={() => {
-                    handleSwitchToRegister(id);
-                    closeMainWindow();
+                    handleSwitchToRegister(id)
+                    closeMainWindow()
                   }}
                 />
                 {metadata && (
@@ -134,6 +181,6 @@ export default function Command() {
           />
         );
       })}
-    </Grid>
+    </List>
   );
 }
