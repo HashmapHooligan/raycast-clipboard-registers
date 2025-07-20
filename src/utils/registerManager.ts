@@ -268,6 +268,103 @@ export class RegisterManager {
       });
     }
   }
+
+  async copyRegisterContent(registerId: 1 | 2 | 3 | 4): Promise<void> {
+    await this.initializeIfNeeded();
+
+    const state = await this.getState();
+    const metadata = state.registers[registerId];
+
+    if (!metadata) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: `Register ${registerId}`,
+        message: "Register is empty",
+      });
+      return;
+    }
+
+    try {
+      await this.loadContentFromFile(metadata);
+      await showToast({
+        style: Toast.Style.Success,
+        title: `Register ${registerId}`,
+        message: `Copied ${metadata.contentType} content to clipboard`,
+      });
+    } catch (error) {
+      console.error("Failed to copy register content:", error);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Copy Failed",
+        message: String(error),
+      });
+    }
+  }
+
+  async clearRegister(registerId: 1 | 2 | 3 | 4): Promise<void> {
+    await this.initializeIfNeeded();
+
+    const state = await this.getState();
+    const metadata = state.registers[registerId];
+
+    if (!metadata) {
+      await showToast({
+        style: Toast.Style.Success,
+        title: `Register ${registerId}`,
+        message: "Register is already empty",
+      });
+      return;
+    }
+
+    try {
+      // Clean up the file
+      await this.cleanupRegisterContent(registerId);
+      
+      // Clear the register in state
+      state.registers[registerId] = null;
+      
+      // If we're clearing the active register, clear the clipboard too
+      if (state.activeRegister === registerId) {
+        await Clipboard.clear();
+      }
+      
+      await this.setState(state);
+      
+      await showToast({
+        style: Toast.Style.Success,
+        title: `Register ${registerId}`,
+        message: "Register cleared",
+      });
+    } catch (error) {
+      console.error("Failed to clear register:", error);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Clear Failed",
+        message: String(error),
+      });
+    }
+  }
+
+  async getRegisterDisplayData(): Promise<{
+    activeRegister: number;
+    registers: Array<{
+      id: 1 | 2 | 3 | 4;
+      metadata: RegisterMetadata | null;
+      isActive: boolean;
+    }>;
+  }> {
+    await this.initializeIfNeeded();
+    const state = await this.getState();
+
+    return {
+      activeRegister: state.activeRegister,
+      registers: [1, 2, 3, 4].map((id) => ({
+        id: id as 1 | 2 | 3 | 4,
+        metadata: state.registers[id as 1 | 2 | 3 | 4],
+        isActive: state.activeRegister === id,
+      })),
+    };
+  }
 }
 
 // Export singleton instance

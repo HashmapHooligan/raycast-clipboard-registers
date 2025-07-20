@@ -8,6 +8,13 @@
   "license": "MIT",
   "commands": [
     {
+      "name": "overview",
+      "title": "Registers Overview",
+      "subtitle": "View and manage all clipboard registers",
+      "description": "View all clipboard registers in a grid layout with quick actions",
+      "mode": "view"
+    },
+    {
       "name": "register-1",
       "title": "Register #1",
       "subtitle": "Switch to clipboard register #1",
