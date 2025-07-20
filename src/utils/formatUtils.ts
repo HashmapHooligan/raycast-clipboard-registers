@@ -38,7 +38,7 @@ export function getContentTypeIcon(contentType: "text" | "file" | "html" | null)
       return { source: Icon.Globe, tintColor: Color.Green };
     case null:
     default:
-      return { source: Icon.Circle, tintColor: Color.SecondaryText };
+      return { source: Icon.Circle, tintColor: Color.Red };
   }
 }
 
