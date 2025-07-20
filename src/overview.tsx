@@ -1,4 +1,4 @@
-import { Action, ActionPanel, List, Icon, showToast, Toast, closeMainWindow } from "@raycast/api";
+import { Action, ActionPanel, List, Icon, showToast, Toast } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { registerManager } from "./utils/registerManager";
 import { RegisterMetadata } from "./utils/types";
