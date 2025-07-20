@@ -113,7 +113,7 @@ export default function Command() {
             accessories={isActive ? [{ icon: Icon.Dot, tooltip: "Active Register" }] : undefined}
             detail={
               <List.Item.Detail
-                markdown={`\`\`\`${preview}\`\`\``}
+                markdown={`\`\`\`\n${preview}\n\`\`\``}
                 metadata={
                   metadata ? (
                     <List.Item.Detail.Metadata>

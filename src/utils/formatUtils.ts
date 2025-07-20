@@ -43,16 +43,6 @@ export function getContentTypeIcon(contentType: "text" | "file" | "html" | null)
 }
 
 /**
- * Truncate text to a specified length with ellipsis
- */
-export function truncateText(text: string, maxLength: number = 500): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return text.substring(0, maxLength - 3) + "...";
-}
-
-/**
  * Get a display-friendly preview for register content
  */
 export function getContentPreview(

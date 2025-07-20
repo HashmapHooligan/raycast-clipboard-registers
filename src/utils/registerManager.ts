@@ -127,7 +127,7 @@ export class RegisterManager {
       case "text": {
         fileName = `${uuid}.txt`;
         await fs.writeFile(join(this.contentPath, fileName), content.text, "utf-8");
-        textPreview = content.text.substring(0, 100);
+        textPreview = content.text.substring(0, 1000) + ((content.text.length > 1000) ? "..." : "");
         break;
       }
 
@@ -135,7 +135,7 @@ export class RegisterManager {
         fileName = `${uuid}.json`;
         const htmlData = { html: content.html, text: content.text };
         await fs.writeFile(join(this.contentPath, fileName), JSON.stringify(htmlData), "utf-8");
-        textPreview = content.text?.substring(0, 100);
+        textPreview = content.text?.substring(0, 1000);
         break;
       }
 
