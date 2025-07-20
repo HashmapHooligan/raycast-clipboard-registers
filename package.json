@@ -11,7 +11,28 @@
       "name": "register-1",
       "title": "Register #1",
       "subtitle": "Switch to clipboard register #1",
-      "description": "",
+      "description": "Switch to clipboard register #1",
+      "mode": "no-view"
+    },
+    {
+      "name": "register-2",
+      "title": "Register #2",
+      "subtitle": "Switch to clipboard register #2",
+      "description": "Switch to clipboard register #2",
+      "mode": "no-view"
+    },
+    {
+      "name": "register-3",
+      "title": "Register #3",
+      "subtitle": "Switch to clipboard register #3",
+      "description": "Switch to clipboard register #3",
+      "mode": "no-view"
+    },
+    {
+      "name": "register-4",
+      "title": "Register #4",
+      "subtitle": "Switch to clipboard register #4",
+      "description": "Switch to clipboard register #4",
       "mode": "no-view"
     }
   ],

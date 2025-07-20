@@ -1,5 +1,5 @@
 import { registerManager } from "./utils/registerManager";
 
 export default async function Command() {
-  await registerManager.switchToRegister(1);
+  await registerManager.switchToRegister(3);
 }
