@@ -20,6 +20,12 @@ Instantly switch to any of the 4 clipboard registers. Each command:
 - Loads the target register's content to your clipboard
 - Shows a confirmation toast with content details
 
+### 🗑️ Clear Registers
+Remove all content from all clipboard registers and delete all cached files. This command:
+- Clears all 4 registers completely
+- Deletes all files stored in the cache folder
+- Preserves your current clipboard
+
 ## How it works
 
 1. **First time**: Your current clipboard becomes Register #1

@@ -42,6 +42,13 @@
       "subtitle": "Switch to clipboard register #4",
       "description": "Switch to clipboard register #4",
       "mode": "no-view"
+    },
+    {
+      "name": "clear-registers",
+      "title": "Clear Registers",
+      "subtitle": "Clear content from all clipboard registers",
+      "description": "Remove all content from all clipboard registers and their files. Warning: This action cannot be undone.",
+      "mode": "no-view"
     }
   ],
   "dependencies": {

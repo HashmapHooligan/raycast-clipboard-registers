@@ -293,9 +293,7 @@ export class RegisterManager {
             } catch (error: any) {
               if (error.code === "ENOENT") {
                 // Throw with useful error message
-                throw new Error(
-                  `Referenced file no longer exists: ${cleanPath}`
-                );
+                throw new Error(`Referenced file no longer exists: ${cleanPath}`);
               }
               throw error;
             }
@@ -462,6 +460,66 @@ export class RegisterManager {
       });
     } catch (error) {
       console.error("Failed to clear register:", error);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Clear Failed",
+        message: String(error),
+      });
+    }
+  }
+
+  /**
+   * Clears all registers and their associated files without touching the clipboard
+   */
+  async clearAllRegisters(): Promise<void> {
+    await this.initializeIfNeeded();
+
+    const state = await this.getState();
+
+    try {
+      // Clean up files for all registers sequentially
+      for (const registerId of REGISTER_IDS as readonly RegisterId[]) {
+        try {
+          await this.cleanupRegisterContent(registerId);
+        } catch (error) {
+          console.warn(`Failed to cleanup register ${registerId}: ${error}`);
+          // Continue with other registers even if one fails
+        }
+      }
+
+      // Delete all files in the content directory to catch any orphaned files
+      try {
+        await this.ensureContentDirectory();
+        const files = await fs.readdir(this.contentPath);
+        for (const file of files) {
+          try {
+            const filePath = join(this.contentPath, file);
+            await fs.unlink(filePath);
+          } catch (error) {
+            console.warn(`Failed to delete file ${file}: ${error}`);
+            // Continue with other files even if one fails
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to clean content directory: ${error}`);
+        // Continue even if directory cleanup fails
+      }
+
+      // Reset all registers to null in state
+      for (const registerId of REGISTER_IDS as readonly RegisterId[]) {
+        state.registers[registerId] = null;
+      }
+
+      // Save updated state
+      await this.setState(state);
+
+      // Show success message
+      await showToast({
+        style: Toast.Style.Success,
+        title: "All Registers Cleared",
+      });
+    } catch (error) {
+      console.error("Failed to clear all registers:", error);
       await showToast({
         style: Toast.Style.Failure,
         title: "Clear Failed",
