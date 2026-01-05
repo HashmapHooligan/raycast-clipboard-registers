@@ -1,4 +1,4 @@
-import { Clipboard, environment, LocalStorage, showToast, Toast } from "@raycast/api";
+import { Clipboard, environment, LocalStorage, showToast, Toast, showHUD } from "@raycast/api";
 import { promises as fs } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
@@ -285,7 +285,20 @@ export class RegisterManager {
           if (validatedPaths.length > 0) {
             // Ensure we're using the correct file path format
             const cleanPath = fileUriToPath(validatedPaths[0]);
-            await Clipboard.copy({ file: cleanPath });
+
+            // Check if the referenced file still exists
+            try {
+              await fs.access(cleanPath);
+              await Clipboard.copy({ file: cleanPath });
+            } catch (error: any) {
+              if (error.code === "ENOENT") {
+                // Throw with useful error message
+                throw new Error(
+                  `Referenced file no longer exists: ${cleanPath}`
+                );
+              }
+              throw error;
+            }
           }
           break;
         }
@@ -294,6 +307,7 @@ export class RegisterManager {
           throw new RegisterError(`Unsupported content type: ${metadata.contentType}`, metadata.registerId);
       }
     } catch (error) {
+      // Throw specific error (ugly, but gets the job done)
       throw new FileOperationError(
         `Failed to load content from register ${metadata.registerId}: ${error}`,
         filePath,
@@ -314,7 +328,12 @@ export class RegisterManager {
       try {
         const filePath = sanitizeFilePath(metadata.fileName, this.contentPath);
         await fs.unlink(filePath);
-      } catch (error) {
+      } catch (error: any) {
+        // If file doesn't exist, that's fine - it's already gone
+        if (error.code === "ENOENT") {
+          console.warn(`File already deleted for register ${validatedRegisterId}: ${metadata.fileName}`);
+          return;
+        }
         throw new FileOperationError(
           `Failed to cleanup file for register ${validatedRegisterId}: ${error}`,
           metadata.fileName,
@@ -336,11 +355,7 @@ export class RegisterManager {
 
     // If switching to the same register, do nothing
     if (state.activeRegister === validatedTargetRegister) {
-      await showToast({
-        style: Toast.Style.Success,
-        title: `Register ${validatedTargetRegister}`,
-        message: "Already active",
-      });
+      await showHUD(`Register ${validatedTargetRegister} is already active`);
       return;
     }
 
@@ -358,20 +373,27 @@ export class RegisterManager {
       // Step 2: Load target register content to clipboard
       const targetMetadata = state.registers[validatedTargetRegister];
       if (targetMetadata) {
-        await this.loadContentFromFile(targetMetadata);
-        await showToast({
-          style: Toast.Style.Success,
-          title: `Register ${validatedTargetRegister}`,
-          message: `Loaded ${targetMetadata.contentType} content from ${new Date(targetMetadata.timestamp).toLocaleTimeString()}`,
-        });
+        try {
+          // Check if file exists before trying to load
+          const filePath = sanitizeFilePath(targetMetadata.fileName, this.contentPath);
+          await fs.access(filePath);
+          await this.loadContentFromFile(targetMetadata);
+          await showHUD(`Switched to Register ${validatedTargetRegister}`);
+        } catch (error: any) {
+          // If file doesn't exist, clear the metadata and treat as empty
+          if (error.code === "ENOENT" || error.message?.includes("no longer exists")) {
+            console.warn(`File missing for register ${validatedTargetRegister}, clearing metadata`);
+            state.registers[validatedTargetRegister] = null;
+            await Clipboard.clear();
+            await showHUD(`Register ${validatedTargetRegister} cleared (file no longer available)`);
+          } else {
+            throw error;
+          }
+        }
       } else {
         // Target register is empty - clear clipboard
         await Clipboard.clear();
-        await showToast({
-          style: Toast.Style.Success,
-          title: `Register ${validatedTargetRegister}`,
-          message: "Register is empty - clipboard cleared",
-        });
+        await showHUD(`Switched to Register ${validatedTargetRegister}`);
       }
 
       // Step 3: Update active register
@@ -379,11 +401,7 @@ export class RegisterManager {
       await this.setState(state);
     } catch (error) {
       console.error("Failed to switch register:", error);
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Register Switch Failed",
-        message: String(error),
-      });
+      await showHUD(`Failed to switch register: ${String(error)}`);
     }
   }
 
