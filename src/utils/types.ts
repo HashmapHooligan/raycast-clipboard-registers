@@ -106,34 +106,3 @@ export function isValidRegisterMetadata(value: unknown): value is RegisterMetada
   );
 }
 
-/**
- * Type guard to check if an object is valid ClipboardState
- */
-export function isValidClipboardState(value: unknown): value is ClipboardState {
-  if (!value || typeof value !== "object") return false;
-
-  const obj = value as Record<string, unknown>;
-
-  return (
-    isValidRegisterId(obj.activeRegister) &&
-    typeof obj.initialized === "boolean" &&
-    typeof obj.registers === "object" &&
-    obj.registers !== null
-  );
-}
-
-// Utility Types
-
-/**
- * Utility type for register operations
- */
-export type RegisterOperation = "switch" | "copy" | "clear";
-
-/**
- * Utility type for file operation results
- */
-export type FileOperationResult<T = void> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-};

@@ -11,7 +11,6 @@ import {
   RegisterDisplayData,
 } from "./types";
 import { CONFIG, CONTENT_TYPES, DEFAULT_STATE, REGISTER_IDS } from "./constants";
-import { RegisterError, FileOperationError, StateError, ClipboardError } from "./errors";
 import {
   validateRegisterId,
   validateClipboardState,
@@ -35,29 +34,17 @@ function fileUriToPath(uri: string): string {
 /**
  * Manages clipboard registers with persistent storage
  */
-export class RegisterManager {
-  private static instance: RegisterManager;
+class RegisterManager {
   private contentPath: string;
+  private _directoryEnsured = false;
 
-  private constructor() {
+  constructor() {
     this.contentPath = join(environment.supportPath, CONFIG.CONTENT_DIR);
-  }
-
-  /**
-   * Gets the singleton instance of RegisterManager
-   */
-  static getInstance(): RegisterManager {
-    if (!RegisterManager.instance) {
-      RegisterManager.instance = new RegisterManager();
-    }
-    return RegisterManager.instance;
   }
 
   /**
    * Ensures the content directory exists (with caching to avoid repeated checks)
    */
-  private _directoryEnsured = false;
-
   async ensureContentDirectory(): Promise<void> {
     if (this._directoryEnsured) {
       return;
@@ -67,26 +54,10 @@ export class RegisterManager {
       await fs.mkdir(this.contentPath, { recursive: true });
       this._directoryEnsured = true;
     } catch (error) {
-      throw new FileOperationError(`Failed to create content directory: ${error}`, this.contentPath);
+      throw new Error(`Failed to create content directory: ${error}`);
     }
   }
 
-  /**
-   * Writes a file atomically by writing to a temporary file first, then renaming
-   * This prevents corruption if the write operation is interrupted
-   */
-  private async writeFileAtomic(filePath: string, content: string): Promise<void> {
-    const tempPath = `${filePath}.tmp`;
-
-    try {
-      await fs.writeFile(tempPath, content, "utf-8");
-      await fs.rename(tempPath, filePath);
-    } catch (error) {
-      // Clean up temp file if it exists, ignore cleanup errors
-      await fs.unlink(tempPath).catch(() => {});
-      throw error;
-    }
-  }
 
   /**
    * Retrieves the current clipboard state from storage
@@ -99,7 +70,7 @@ export class RegisterManager {
         return validateClipboardState(parsed);
       } catch (error) {
         console.error("Failed to parse stored state:", error);
-        throw new StateError(`Invalid stored state: ${error}`);
+        throw new Error(`Invalid stored state: ${error}`);
       }
     }
 
@@ -115,7 +86,7 @@ export class RegisterManager {
       const validatedState = validateClipboardState(state);
       await LocalStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(validatedState));
     } catch (error) {
-      throw new StateError(`Failed to save state: ${error}`);
+      throw new Error(`Failed to save state: ${error}`);
     }
   }
 
@@ -144,7 +115,7 @@ export class RegisterManager {
           message: "Register 1 is now active with current clipboard content",
         });
       } catch (error) {
-        throw new RegisterError(`Failed to initialize clipboard registers: ${error}`);
+        throw new Error(`Failed to initialize clipboard registers: ${error}`);
       }
     }
   }
@@ -181,7 +152,7 @@ export class RegisterManager {
 
       return null;
     } catch (error) {
-      throw new ClipboardError(`Failed to read clipboard: ${error}`);
+      throw new Error(`Failed to read clipboard: ${error}`);
     }
   }
 
@@ -206,7 +177,7 @@ export class RegisterManager {
           const validatedText = validateTextContent(content.text);
           fileName = `${uuid}.txt`;
           const filePath = sanitizeFilePath(fileName, this.contentPath);
-          await this.writeFileAtomic(filePath, validatedText);
+          await fs.writeFile(filePath, validatedText, "utf-8");
           textPreview = createTextPreview(validatedText);
           break;
         }
@@ -216,7 +187,7 @@ export class RegisterManager {
           fileName = `${uuid}.json`;
           const filePath = sanitizeFilePath(fileName, this.contentPath);
           const htmlData = { html: validatedHtml.html, text: validatedHtml.text };
-          await this.writeFileAtomic(filePath, JSON.stringify(htmlData));
+          await fs.writeFile(filePath, JSON.stringify(htmlData), "utf-8");
           textPreview = validatedHtml.text ? createTextPreview(validatedHtml.text) : undefined;
           break;
         }
@@ -226,14 +197,14 @@ export class RegisterManager {
           fileName = `${uuid}.json`;
           filePaths = validatedPaths;
           const filePath = sanitizeFilePath(fileName, this.contentPath);
-          await this.writeFileAtomic(filePath, JSON.stringify(validatedPaths));
+          await fs.writeFile(filePath, JSON.stringify(validatedPaths), "utf-8");
           originalFileName = validatedPaths[0]?.split("/").pop();
           textPreview = `${validatedPaths.length} file(s)`;
           break;
         }
 
         default:
-          throw new RegisterError(`Unsupported content type`, validatedRegisterId);
+          throw new Error(`Unsupported content type for register ${validatedRegisterId}`);
       }
 
       return {
@@ -246,11 +217,7 @@ export class RegisterManager {
         textPreview,
       };
     } catch (error) {
-      throw new FileOperationError(
-        `Failed to save content for register ${validatedRegisterId}: ${error}`,
-        `${uuid}.${content.type}`,
-        validatedRegisterId,
-      );
+      throw new Error(`Failed to save content for register ${validatedRegisterId}: ${error}`);
     }
   }
 
@@ -304,14 +271,10 @@ export class RegisterManager {
         }
 
         default:
-          throw new RegisterError(`Unsupported content type: ${metadata.contentType}`, metadata.registerId);
+          throw new Error(`Unsupported content type: ${metadata.contentType} for register ${metadata.registerId}`);
       }
     } catch (error) {
-      throw new FileOperationError(
-        `Failed to load content from register ${metadata.registerId}: ${error}`,
-        filePath,
-        metadata.registerId,
-      );
+      throw new Error(`Failed to load content from register ${metadata.registerId}: ${error}`);
     }
   }
 
@@ -333,11 +296,7 @@ export class RegisterManager {
           console.warn(`File already deleted for register ${validatedRegisterId}: ${metadata.fileName}`);
           return;
         }
-        throw new FileOperationError(
-          `Failed to cleanup file for register ${validatedRegisterId}: ${error}`,
-          metadata.fileName,
-          validatedRegisterId,
-        );
+        throw new Error(`Failed to cleanup file for register ${validatedRegisterId}: ${error}`);
       }
     }
   }
@@ -579,5 +538,5 @@ export class RegisterManager {
   }
 }
 
-// Export singleton instance
-export const registerManager = RegisterManager.getInstance();
+// Export single instance
+export const registerManager = new RegisterManager();

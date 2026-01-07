@@ -1,8 +1,78 @@
 import { Action, ActionPanel, List, Icon, showToast, Toast, Color } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { registerManager } from "./utils/registerManager";
-import { RegisterDisplayData, RegisterId } from "./utils/types";
-import { formatRelativeTime, getContentTypeIcon, getContentPreview } from "./utils/formatUtils";
+import { RegisterDisplayData, RegisterId, ContentType } from "./utils/types";
+import { CONTENT_TYPES } from "./utils/constants";
+
+/**
+ * Time constants for relative time formatting
+ */
+const TIME_CONSTANTS = {
+  MINUTE: 1000 * 60,
+  HOUR: 1000 * 60 * 60,
+  DAY: 1000 * 60 * 60 * 24,
+} as const;
+
+/**
+ * Formats a timestamp into a human-readable relative time string
+ */
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  const minutes = Math.floor(diff / TIME_CONSTANTS.MINUTE);
+  const hours = Math.floor(diff / TIME_CONSTANTS.HOUR);
+  const days = Math.floor(diff / TIME_CONSTANTS.DAY);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
+/**
+ * Gets the appropriate Raycast icon and color for a content type
+ */
+function getContentTypeIcon(contentType: ContentType | null): { source: Icon; tintColor: Color } {
+  switch (contentType) {
+    case CONTENT_TYPES.TEXT:
+      return { source: Icon.Text, tintColor: Color.Blue };
+    case CONTENT_TYPES.FILE:
+      return { source: Icon.Document, tintColor: Color.Orange };
+    case CONTENT_TYPES.HTML:
+      return { source: Icon.Globe, tintColor: Color.Green };
+    default:
+      return { source: Icon.Circle, tintColor: Color.Red };
+  }
+}
+
+/**
+ * Generates a display-friendly preview string for register content
+ */
+function getContentPreview(
+  contentType: ContentType | null,
+  textPreview?: string,
+  originalFileName?: string,
+  filePaths?: string[],
+): string {
+  if (!contentType) return "Empty register";
+
+  switch (contentType) {
+    case CONTENT_TYPES.TEXT:
+    case CONTENT_TYPES.HTML:
+      return textPreview || "No preview available";
+    case CONTENT_TYPES.FILE:
+      if (originalFileName) return originalFileName;
+      if (filePaths && filePaths.length > 0) {
+        const fileName = filePaths[0].split("/").pop() || "Unknown file";
+        return filePaths.length > 1 ? `${fileName} (+${filePaths.length - 1} more)` : fileName;
+      }
+      return "File content";
+    default:
+      return "Unknown content";
+  }
+}
 
 export default function Command() {
   const [displayData, setDisplayData] = useState<RegisterDisplayData | null>(null);
