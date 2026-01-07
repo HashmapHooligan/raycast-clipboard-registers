@@ -82,12 +82,8 @@ export class RegisterManager {
       await fs.writeFile(tempPath, content, "utf-8");
       await fs.rename(tempPath, filePath);
     } catch (error) {
-      // Clean up temp file if it exists
-      try {
-        await fs.unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
-      }
+      // Clean up temp file if it exists, ignore cleanup errors
+      await fs.unlink(tempPath).catch(() => {});
       throw error;
     }
   }
@@ -259,6 +255,30 @@ export class RegisterManager {
   }
 
   /**
+   * Loads file content to clipboard, validating that the referenced file exists
+   */
+  private async copyFileContentToClipboard(filePath: string): Promise<void> {
+    const filePaths = JSON.parse(await fs.readFile(filePath, "utf-8"));
+    const validatedPaths = validateFilePaths(filePaths);
+
+    if (validatedPaths.length === 0) {
+      return;
+    }
+
+    const cleanPath = fileUriToPath(validatedPaths[0]);
+
+    // Check if the referenced file still exists
+    await fs.access(cleanPath).catch((error: any) => {
+      if (error.code === "ENOENT") {
+        throw new Error(`Referenced file no longer exists: ${cleanPath}`);
+      }
+      throw error;
+    });
+
+    await Clipboard.copy({ file: cleanPath });
+  }
+
+  /**
    * Loads content from file and copies it to clipboard
    */
   async loadContentFromFile(metadata: RegisterMetadata): Promise<void> {
@@ -279,25 +299,7 @@ export class RegisterManager {
         }
 
         case CONTENT_TYPES.FILE: {
-          const filePaths = JSON.parse(await fs.readFile(filePath, "utf-8"));
-          const validatedPaths = validateFilePaths(filePaths);
-          // Copy first file path as file reference
-          if (validatedPaths.length > 0) {
-            // Ensure we're using the correct file path format
-            const cleanPath = fileUriToPath(validatedPaths[0]);
-
-            // Check if the referenced file still exists
-            try {
-              await fs.access(cleanPath);
-              await Clipboard.copy({ file: cleanPath });
-            } catch (error: any) {
-              if (error.code === "ENOENT") {
-                // Throw with useful error message
-                throw new Error(`Referenced file no longer exists: ${cleanPath}`);
-              }
-              throw error;
-            }
-          }
+          await this.copyFileContentToClipboard(filePath);
           break;
         }
 
@@ -305,7 +307,6 @@ export class RegisterManager {
           throw new RegisterError(`Unsupported content type: ${metadata.contentType}`, metadata.registerId);
       }
     } catch (error) {
-      // Throw specific error (ugly, but gets the job done)
       throw new FileOperationError(
         `Failed to load content from register ${metadata.registerId}: ${error}`,
         filePath,
@@ -342,6 +343,45 @@ export class RegisterManager {
   }
 
   /**
+   * Loads target register content, handling missing files gracefully
+   * Returns true if metadata was cleared due to missing file
+   */
+  private async loadTargetRegisterContent(
+    targetMetadata: RegisterMetadata,
+    targetRegister: RegisterId,
+  ): Promise<boolean> {
+    const filePath = sanitizeFilePath(targetMetadata.fileName, this.contentPath);
+
+    // Check if file exists before trying to load
+    const fileExists = await fs
+      .access(filePath)
+      .then(() => true)
+      .catch((error: any) => {
+        if (error.code === "ENOENT") {
+          return false;
+        }
+        throw error;
+      });
+
+    if (!fileExists) {
+      console.warn(`File missing for register ${targetRegister}, clearing metadata`);
+      await Clipboard.clear();
+      await showToast({
+        style: Toast.Style.Success,
+        title: `Register ${targetRegister} cleared (file no longer available)`,
+      });
+      return true; // Metadata needs to be cleared
+    }
+
+    await this.loadContentFromFile(targetMetadata);
+    await showToast({
+      style: Toast.Style.Success,
+      title: `Register ${targetRegister}`,
+    });
+    return false; // Metadata is still valid
+  }
+
+  /**
    * Switches to a different register
    */
   async switchToRegister(targetRegister: RegisterId): Promise<void> {
@@ -374,28 +414,9 @@ export class RegisterManager {
       // Step 2: Load target register content to clipboard
       const targetMetadata = state.registers[validatedTargetRegister];
       if (targetMetadata) {
-        try {
-          // Check if file exists before trying to load
-          const filePath = sanitizeFilePath(targetMetadata.fileName, this.contentPath);
-          await fs.access(filePath);
-          await this.loadContentFromFile(targetMetadata);
-          await showToast({
-            style: Toast.Style.Success,
-            title: `Register ${validatedTargetRegister}`,
-          });
-        } catch (error: any) {
-          // If file doesn't exist, clear the metadata and treat as empty
-          if (error.code === "ENOENT" || error.message?.includes("no longer exists")) {
-            console.warn(`File missing for register ${validatedTargetRegister}, clearing metadata`);
-            state.registers[validatedTargetRegister] = null;
-            await Clipboard.clear();
-            await showToast({
-              style: Toast.Style.Success,
-              title: `Register ${validatedTargetRegister} cleared (file no longer available)`,
-            });
-          } else {
-            throw error;
-          }
+        const shouldClearMetadata = await this.loadTargetRegisterContent(targetMetadata, validatedTargetRegister);
+        if (shouldClearMetadata) {
+          state.registers[validatedTargetRegister] = null;
         }
       } else {
         // Target register is empty - clear clipboard
@@ -469,6 +490,40 @@ export class RegisterManager {
   }
 
   /**
+   * Cleans up all register content files
+   */
+  private async cleanupAllRegisterFiles(): Promise<void> {
+    const cleanupPromises = (REGISTER_IDS as readonly RegisterId[]).map((registerId) =>
+      this.cleanupRegisterContent(registerId).catch((error) => {
+        console.warn(`Failed to cleanup register ${registerId}: ${error}`);
+      }),
+    );
+
+    await Promise.all(cleanupPromises);
+  }
+
+  /**
+   * Deletes all files in the content directory to catch orphaned files
+   */
+  private async cleanupContentDirectory(): Promise<void> {
+    await this.ensureContentDirectory();
+
+    const files = await fs.readdir(this.contentPath).catch((error) => {
+      console.warn(`Failed to read content directory: ${error}`);
+      return [];
+    });
+
+    const deletePromises = files.map((file) => {
+      const filePath = join(this.contentPath, file);
+      return fs.unlink(filePath).catch((error) => {
+        console.warn(`Failed to delete file ${file}: ${error}`);
+      });
+    });
+
+    await Promise.all(deletePromises);
+  }
+
+  /**
    * Clears all registers and their associated files without touching the clipboard
    */
   async clearAllRegisters(): Promise<void> {
@@ -477,33 +532,11 @@ export class RegisterManager {
     const state = await this.getState();
 
     try {
-      // Clean up files for all registers sequentially
-      for (const registerId of REGISTER_IDS as readonly RegisterId[]) {
-        try {
-          await this.cleanupRegisterContent(registerId);
-        } catch (error) {
-          console.warn(`Failed to cleanup register ${registerId}: ${error}`);
-          // Continue with other registers even if one fails
-        }
-      }
+      // Clean up files for all registers
+      await this.cleanupAllRegisterFiles();
 
       // Delete all files in the content directory to catch any orphaned files
-      try {
-        await this.ensureContentDirectory();
-        const files = await fs.readdir(this.contentPath);
-        for (const file of files) {
-          try {
-            const filePath = join(this.contentPath, file);
-            await fs.unlink(filePath);
-          } catch (error) {
-            console.warn(`Failed to delete file ${file}: ${error}`);
-            // Continue with other files even if one fails
-          }
-        }
-      } catch (error) {
-        console.warn(`Failed to clean content directory: ${error}`);
-        // Continue even if directory cleanup fails
-      }
+      await this.cleanupContentDirectory();
 
       // Reset all registers to null in state
       for (const registerId of REGISTER_IDS as readonly RegisterId[]) {
